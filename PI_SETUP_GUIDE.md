@@ -103,7 +103,8 @@ To check for updates every 5 minutes:
    */5 * * * * cd ~/Multilocal-Host && git fetch && [ $(git rev-parse HEAD) != $(git rev-parse @{u}) ] && ./deploy.sh >> ~/deploy.log 2>&1
    ```
 
-**What this does:**
+### What this does
+
 Every 5 minutes, it fetches from GitHub. If it detects that your local branch is behind the remote (`git rev-parse HEAD != git rev-parse @{u}`), it runs the `./deploy.sh` script and logs the output to `~/deploy.log`.
 
 Now you can just push code to GitHub and the Raspberry Pi will automatically update and restart within 5 minutes!

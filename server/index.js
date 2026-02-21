@@ -610,7 +610,7 @@ io.on('connection', (socket) => {
 });
 
 // ─── Catch-all to serve React app ───
-app.get('*', (req, res) => {
+app.get(/.*/, (req, res) => {
     res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
