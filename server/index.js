@@ -3,9 +3,17 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { networkInterfaces } from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
+
+// Serve static React client files in production
+app.use(express.static(path.join(__dirname, '../client/dist')));
 
 app.get('/health', (req, res) => res.json({ status: 'Platform Server Running' }));
 
@@ -599,6 +607,11 @@ io.on('connection', (socket) => {
 
     socket.on('leave_room', handleLeave);
     socket.on('disconnect', () => { console.log(`[-] Disconnected: ${socket.id}`); handleLeave(); });
+});
+
+// ─── Catch-all to serve React app ───
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
