@@ -55,6 +55,34 @@ pm2 startup
 pm2 save
 ```
 
+## 6. How to View Your Logs
+
+If you want to view the output from the Node server (including Socket.io events, errors, console.logs, and any crashing issues):
+
+### Server Logs (PM2)
+
+Because the server is run using `pm2`, you can watch the live logs with:
+
+```bash
+pm2 logs arcade-hub
+```
+
+*To exit the live log view, press `Ctrl+C`.*
+
+### Deployment Logs
+
+If you want to see if your auto-sync worked correctly (e.g., if the pull/build was successful):
+
+```bash
+cat ~/deploy.log
+```
+
+Or you can stream the latest updates as they happen with:
+
+```bash
+tail -f ~/deploy.log
+```
+
 ---
 
 ## 🔁 How to Auto-Sync When You Push an Update
