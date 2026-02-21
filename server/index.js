@@ -117,7 +117,7 @@ io.on('connection', (socket) => {
         const player = room.players.find(p => p.id === socket.id);
         if (!player?.isHost) return;
 
-        const MIN_PLAYERS = { quiz: 2, mrwhite: 3, imposter: 3, gokart: 2, ludo: 2, snakeladders: 2 };
+        const MIN_PLAYERS = { quiz: 2, mrwhite: 3, imposter: 3, gokart: 2, ludo: 2, snakeladders: 2, uno: 2 };
         const minRequired = MIN_PLAYERS[room.game] ?? 2;
         if (room.players.length < minRequired) {
             socket.emit('start_error', { error: `Need at least ${minRequired} players to start ${room.game === 'mrwhite' ? 'Mr. White' : room.game}.` });
@@ -251,6 +251,56 @@ io.on('connection', (socket) => {
                 dieRolled: false,
                 lastEvent: null,
                 winner: null,
+            };
+        }
+
+        // ── UNO ──
+        else if (room.game === 'uno') {
+            const colors = ['red', 'blue', 'green', 'yellow'];
+            let deck = [];
+            colors.forEach(color => {
+                deck.push({ color, value: '0', type: 'number' });
+                for (let i = 1; i <= 9; i++) {
+                    deck.push({ color, value: i.toString(), type: 'number' });
+                    deck.push({ color, value: i.toString(), type: 'number' });
+                }
+                for (let i = 0; i < 2; i++) {
+                    deck.push({ color, value: 'skip', type: 'action' });
+                    deck.push({ color, value: 'reverse', type: 'action' });
+                    deck.push({ color, value: 'draw2', type: 'action' });
+                }
+            });
+            for (let i = 0; i < 4; i++) {
+                deck.push({ color: 'black', value: 'wild', type: 'wild' });
+                deck.push({ color: 'black', value: 'draw4', type: 'wild' });
+            }
+
+            // Shuffle
+            deck.sort(() => Math.random() - 0.5);
+
+            const hands = {};
+            room.players.forEach(p => {
+                hands[p.id] = deck.splice(0, 7);
+            });
+
+            const discardPile = [];
+            let topCard = deck.pop();
+            // First card should not be a draw4/wild ideally, but keeping it simple: just re-draw if wild
+            while (topCard.color === 'black') {
+                deck.splice(Math.floor(Math.random() * deck.length), 0, topCard);
+                topCard = deck.pop();
+            }
+            discardPile.push(topCard);
+
+            room.gameState = {
+                deck,
+                discardPile,
+                hands,
+                currentColor: topCard.color,
+                currentTurnIndex: 0,
+                direction: 1, // 1 for clockwise, -1 for counter-clockwise
+                winner: null,
+                unoCalled: {} // { playerId: true }
             };
         }
 
@@ -578,6 +628,117 @@ io.on('connection', (socket) => {
         }
         io.to(roomCode).emit('room_update', room);
     });
+
+    // ─── UNO: Play Card ───
+    socket.on('uno_play_card', ({ roomCode, cardIndex, newColor }) => {
+        const room = rooms[roomCode];
+        if (!room || room.game !== 'uno' || room.state !== 'playing' || !room.gameState) return;
+        const gs = room.gameState;
+        const cp = room.players[gs.currentTurnIndex];
+        if (cp?.id !== socket.id) return; // not their turn
+
+        const hand = gs.hands[socket.id];
+        if (!hand || cardIndex < 0 || cardIndex >= hand.length) return;
+        const card = hand[cardIndex];
+
+        // Validation
+        const topCard = gs.discardPile[gs.discardPile.length - 1];
+        const isValid = card.color === 'black' || card.color === gs.currentColor || card.value === topCard.value;
+        if (!isValid) return;
+
+        // Play card
+        hand.splice(cardIndex, 1);
+        gs.discardPile.push(card);
+        gs.currentColor = card.color === 'black' ? (newColor || 'red') : card.color;
+
+        // Reset uno call if they had 1 card but didn't call it (auto penalty could be added, here we just clear it)
+        if (hand.length > 1) gs.unoCalled[socket.id] = false;
+
+        // Check win
+        if (hand.length === 0) {
+            gs.winner = socket.id;
+            room.state = 'finished';
+            io.to(roomCode).emit('room_update', room);
+            return;
+        }
+
+        // Handle Action/Wild cards
+        let skipNext = false;
+        if (card.value === 'reverse') {
+            gs.direction *= -1;
+            // If only 2 players, reverse acts like a skip
+            if (room.players.length === 2) skipNext = true;
+        } else if (card.value === 'skip') {
+            skipNext = true;
+        } else if (card.value === 'draw2') {
+            skipNext = true;
+            const nextIdx = (gs.currentTurnIndex + gs.direction + room.players.length) % room.players.length;
+            const nextPlayer = room.players[nextIdx];
+            for (let i = 0; i < 2; i++) {
+                if (gs.deck.length === 0) reshuffleUnoDeck(gs);
+                if (gs.deck.length > 0) gs.hands[nextPlayer.id].push(gs.deck.pop());
+            }
+            gs.unoCalled[nextPlayer.id] = false;
+        } else if (card.value === 'draw4') {
+            skipNext = true;
+            const nextIdx = (gs.currentTurnIndex + gs.direction + room.players.length) % room.players.length;
+            const nextPlayer = room.players[nextIdx];
+            for (let i = 0; i < 4; i++) {
+                if (gs.deck.length === 0) reshuffleUnoDeck(gs);
+                if (gs.deck.length > 0) gs.hands[nextPlayer.id].push(gs.deck.pop());
+            }
+            gs.unoCalled[nextPlayer.id] = false;
+        }
+
+        // Advance turn
+        let steps = skipNext ? 2 : 1;
+        gs.currentTurnIndex = (gs.currentTurnIndex + (gs.direction * steps) + (room.players.length * 2)) % room.players.length;
+
+        io.to(roomCode).emit('room_update', room);
+    });
+
+    // ─── UNO: Draw Card ───
+    socket.on('uno_draw_card', ({ roomCode }) => {
+        const room = rooms[roomCode];
+        if (!room || room.game !== 'uno' || room.state !== 'playing' || !room.gameState) return;
+        const gs = room.gameState;
+        const cp = room.players[gs.currentTurnIndex];
+        if (cp?.id !== socket.id) return; // not their turn
+
+        if (gs.deck.length === 0) reshuffleUnoDeck(gs);
+        if (gs.deck.length > 0) {
+            gs.hands[socket.id].push(gs.deck.pop());
+            gs.unoCalled[socket.id] = false;
+        }
+
+        // Advance turn
+        gs.currentTurnIndex = (gs.currentTurnIndex + gs.direction + room.players.length) % room.players.length;
+        io.to(roomCode).emit('room_update', room);
+    });
+
+    // ─── UNO: Call UNO ───
+    socket.on('uno_call', ({ roomCode }) => {
+        const room = rooms[roomCode];
+        if (!room || room.game !== 'uno' || room.state !== 'playing' || !room.gameState) return;
+        const gs = room.gameState;
+        if (gs.hands[socket.id] && gs.hands[socket.id].length <= 2) {
+            gs.unoCalled[socket.id] = true;
+            io.to(roomCode).emit('room_update', room);
+        }
+    });
+
+    function reshuffleUnoDeck(gs) {
+        if (gs.discardPile.length <= 1) return;
+        const top = gs.discardPile.pop();
+        gs.deck = gs.discardPile;
+        gs.deck.forEach(c => {
+            if (c.color === 'black') {
+                // leave as black, value remains same
+            }
+        });
+        gs.deck.sort(() => Math.random() - 0.5);
+        gs.discardPile = [top];
+    }
 
     // ─── Return to Lobby ───
     socket.on('return_to_lobby', ({ roomCode }) => {

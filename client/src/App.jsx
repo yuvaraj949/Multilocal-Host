@@ -8,6 +8,7 @@ import Imposter from './games/Imposter';
 import GoKart from './games/GoKart';
 import Ludo from './games/Ludo';
 import SnakeLadders from './games/SnakeLadders';
+import Uno from './games/Uno';
 
 const backendHost = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
 const SERVER_URL = `http://${backendHost}:3000`;
@@ -148,6 +149,7 @@ function App() {
                   <option value="gokart">🏎️ Go Kart</option>
                   <option value="ludo">🔵 Ludo</option>
                   <option value="snakeladders">🐍 Snake &amp; Ladders</option>
+                  <option value="uno">🃏 UNO</option>
                 </select>
               </div>
             ) : (
@@ -208,6 +210,8 @@ function App() {
       return <div className="app-container"><Ludo roomState={roomState} socket={socket} roomCode={roomCode} onReturnLobby={handleReturnLobby} /></div>;
     } else if (roomState.game === 'snakeladders') {
       return <div className="app-container"><SnakeLadders roomState={roomState} socket={socket} roomCode={roomCode} onReturnLobby={handleReturnLobby} /></div>;
+    } else if (roomState.game === 'uno') {
+      return <div className="app-container"><Uno roomState={roomState} socket={socket} roomCode={roomCode} onReturnLobby={handleReturnLobby} /></div>;
     } else {
       return (
         <div className="app-container">
@@ -308,6 +312,13 @@ const INSTRUCTIONS = {
     '🐍 Land on a snake\'s head — you slide down!',
     '🪜 Land on a ladder\'s bottom — you climb up!',
     '🏁 Race to reach cell 100 first to win!'
+  ],
+  uno: [
+    '🃏 Match the color or number of the top card on the discard pile.',
+    '🎯 Use Action cards (Skip, Reverse, Draw Two) to mess with opponents.',
+    '🌈 Play Wild cards to change the current color.',
+    '⚠️ Call UNO when you have exactly TWO cards (before playing your second to last card) otherwise you risk drawing if penalized. But for this simplified version, just try to get rid of all your cards first!',
+    '🏆 First player to empty their hand wins!'
   ],
 };
 
