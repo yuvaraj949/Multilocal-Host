@@ -9,6 +9,7 @@ git pull origin main
 echo "📦 Installing client dependencies and building..."
 cd client
 npm install
+export NODE_OPTIONS="--max-old-space-size=2048"
 npm run build
 cd ..
 
