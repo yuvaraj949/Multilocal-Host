@@ -3,6 +3,9 @@
 # Arcade Hub Auto-Deploy Script
 # Run this on your Raspberry Pi to pull the latest changes and restart the server
 
+# Ensure Node and PM2 are in the PATH when run via Cron
+export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
+
 echo "🔽 Pulling latest changes from GitHub..."
 git pull origin main
 
