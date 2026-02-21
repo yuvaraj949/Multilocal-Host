@@ -212,12 +212,16 @@ io.on('connection', (socket) => {
         else if (room.game === 'gokart') {
             room.gameState = {
                 totalLaps: 3,
-                positions: {},   // { playerId: { progress:0, angle:0, laps:0 } }
+                positions: {},   // { playerId: { progress:0, angle:0, laps:0, x:0, y:0 } }
                 finishOrder: [], // playerIds in finish order
                 startTime: Date.now()
             };
-            room.players.forEach(p => {
-                room.gameState.positions[p.id] = { progress: 0, angle: 0, laps: 0, name: p.name };
+            room.players.forEach((p, idx) => {
+                // Determine starting position on track based on start finish line
+                // The start finish line is WAYPOINTS[0] which is [180, 80]
+                const startX = 180 + (idx % 2 === 0 ? -15 : 15);
+                const startY = 80 + Math.floor(idx / 2) * 25;
+                room.gameState.positions[p.id] = { progress: 0, angle: -Math.PI / 2, laps: 0, x: startX, y: startY, name: p.name };
             });
         }
 
@@ -392,12 +396,12 @@ io.on('connection', (socket) => {
     });
 
     // ─── Go Kart: Position Update ───
-    socket.on('kart_position', ({ roomCode, progress, angle, laps }) => {
+    socket.on('kart_position', ({ roomCode, progress, angle, laps, x, y }) => {
         const room = rooms[roomCode];
         if (!room || room.game !== 'gokart' || !room.gameState) return;
         const gs = room.gameState;
         if (!gs.positions[socket.id]) return;
-        gs.positions[socket.id] = { ...gs.positions[socket.id], progress, angle, laps };
+        gs.positions[socket.id] = { ...gs.positions[socket.id], progress, angle, laps, x, y };
         // Broadcast all positions (lightweight)
         const allPos = Object.entries(gs.positions).map(([id, p]) => ({ id, ...p }));
         io.to(roomCode).emit('kart_positions', allPos);
